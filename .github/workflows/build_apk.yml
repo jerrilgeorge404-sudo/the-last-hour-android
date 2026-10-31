@@ -34,9 +34,9 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0
-          name: "The Last Hour: Project Echo Mobile (v1.0)"
-          body: "Direct APK download for Android phone. Tap TheLastHour_ProjectEcho.apk below to install!"
+          tag_name: v1.1
+          name: "The Last Hour: Project Echo Mobile (v1.1 - Full Laboratory Upgrade)"
+          body: "Direct APK download for Android phone. Includes full 3D laboratory, stasis chamber, server bank, wiring puzzle, and authentic CRT interfaces. Tap TheLastHour_ProjectEcho.apk below to install!"
           files: app/build/outputs/apk/debug/TheLastHour_ProjectEcho.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
