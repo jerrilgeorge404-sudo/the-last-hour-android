@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>The Last Hour: Project Echo</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+    body, html { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Courier New', monospace; color: #fff; }
+    #canvas3d { width: 100%; height: 100%; display: block; }
+    
+    /* HUD OVERLAYS */
+    #hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+    
+    /* Crosshair */
+    #crosshair {
+      position: absolute; top: 50%; left: 50%; width: 10px; height: 10px;
+      transform: translate(-50%, -50%); border-radius: 50%;
+      border: 1.5px solid rgba(0, 240, 255, 0.6); pointer-events: none;
+      transition: all 0.2s ease;
+    }
+    #crosshair.active {
+      width: 22px; height: 22px; border-color: #ffaa00; background: rgba(255, 170, 0, 0.25);
+    }
+    
+    /* Objectives Header */
+    #objective-card {
+      position: absolute; top: 16px; left: 16px;
+      background: rgba(4, 12, 18, 0.85); border: 1px solid rgba(0, 220, 255, 0.4);
+      border-left: 4px solid #00e5ff; padding: 10px 16px; border-radius: 4px;
+      max-width: 420px; pointer-events: auto;
+    }
+    #objective-card h3 { font-size: 11px; letter-spacing: 1.5px; color: #00e5ff; margin-bottom: 4px; }
+    #objective-text { font-size: 13px; color: #e0f4ff; font-weight: bold; }
+    
+    /* Flashlight Status */
+    #status-badge {
+      position: absolute; top: 16px; right: 16px;
+      background: rgba(4, 12, 18, 0.85); border: 1px solid rgba(0, 220, 255, 0.4);
+      padding: 8px 14px; border-radius: 4px; font-size: 11px; letter-spacing: 1px; color: #88ccdd;
+    }
+    
+    /* Prompts */
+    #action-prompt {
+      position: absolute; top: 62%; left: 50%; transform: translateX(-50%);
+      background: rgba(2, 8, 14, 0.9); border: 1px solid #ffaa00;
+      color: #ffcc44; font-size: 14px; font-weight: bold; letter-spacing: 1px;
+      padding: 8px 20px; border-radius: 20px; display: none; text-shadow: 0 0 8px #ffaa00;
+    }
+
+    /* TOUCH CONTROLS (VIRTUAL JOYSTICK & BUTTONS) */
+    #touch-controls { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: auto; z-index: 20; }
+    
+    /* Virtual Joystick */
+    #joystick-zone {
+      position: absolute; bottom: 20px; left: 20px; width: 160px; height: 160px;
+      border-radius: 50%; background: rgba(12, 24, 34, 0.45);
+      border: 1.5px solid rgba(0, 220, 255, 0.4); touch-action: none;
+    }
+    #joystick-knob {
+      position: absolute; top: 50px; left: 50px; width: 60px; height: 60px;
+      border-radius: 50%; background: radial-gradient(circle, #00f0ff 0%, #0088aa 100%);
+      box-shadow: 0 0 16px #00f0ff; pointer-events: none;
+    }
+    
+    /* Action Buttons (Right) */
+    .touch-btn {
+      position: absolute; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      font-weight: bold; font-family: monospace; text-shadow: 0 0 4px #000;
+      touch-action: none; pointer-events: auto; -webkit-tap-highlight-color: transparent;
+    }
+    #btn-use {
+      bottom: 30px; right: 30px; width: 84px; height: 84px;
+      background: rgba(12, 26, 38, 0.8); border: 2px solid #00e5ff;
+      color: #fff; font-size: 15px; box-shadow: 0 0 12px rgba(0, 229, 255, 0.4);
+    }
+    #btn-use.highlight {
+      background: rgba(255, 170, 0, 0.85); border-color: #ffe066;
+      color: #000; box-shadow: 0 0 24px #ffaa00; animation: pulse 1s infinite alternate;
+    }
+    #btn-light {
+      bottom: 130px; right: 30px; width: 62px; height: 62px;
+      background: rgba(12, 26, 38, 0.8); border: 1.5px solid #00e5ff;
+      color: #00f0ff; font-size: 12px;
+    }
+    #btn-light.active {
+      background: #ffcc00; border-color: #fff; color: #000; box-shadow: 0 0 16px #ffcc00;
+    }
+    #btn-run {
+      bottom: 30px; right: 130px; width: 62px; height: 62px;
+      background: rgba(12, 26, 38, 0.8); border: 1.5px solid #00e5ff;
+      color: #00f0ff; font-size: 12px;
+    }
+    #btn-run.active {
+      background: #00e575; border-color: #fff; color: #000; box-shadow: 0 0 16px #00e575;
+    }
+    
+    @keyframes pulse { from { transform: scale(1.0); } to { transform: scale(1.08); } }
+
+    /* WIRE PUZZLE MODAL */
+    #wire-puzzle-modal {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(2, 6, 10, 0.95); z-index: 100; display: none;
+      align-items: center; justify-content: center; flex-direction: column;
+    }
+    #wire-board {
+      width: 90%; max-width: 580px; height: 320px; background: #161c22;
+      border: 3px solid #364958; border-radius: 8px; position: relative;
+      box-shadow: 0 0 30px rgba(0, 0, 0, 0.9);
+    }
+    #wire-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+    .wire-terminal {
+      position: absolute; width: 26px; height: 26px; border-radius: 50%;
+      border: 3px solid #fff; cursor: pointer; transform: translate(-50%, -50%);
+    }
+    .terminal-left { left: 40px; }
+    .terminal-right { right: 40px; }
+    .term-red { background: #ff2a2a; border-color: #ff8888; }
+    .term-blue { background: #0088ff; border-color: #88ccff; }
+    .term-green { background: #00dd55; border-color: #88ffaa; }
+    .term-yellow { background: #ffcc00; border-color: #ffee88; }
+    
+    /* CRT TERMINAL DIALOGUE MODAL */
+    #terminal-modal {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(2, 4, 8, 0.94); z-index: 90; display: none;
+      align-items: center; justify-content: center;
+    }
+    #crt-screen {
+      width: 88%; max-width: 640px; height: 360px; background: #04100c;
+      border: 4px solid #1a3c2e; border-radius: 12px; padding: 24px;
+      box-shadow: 0 0 40px rgba(0, 255, 128, 0.2); overflow-y: auto;
+      font-family: 'Courier New', monospace; color: #20ff80; text-shadow: 0 0 6px #20ff80;
+    }
+    #crt-screen h2 { font-size: 18px; margin-bottom: 12px; border-bottom: 1px dashed #20ff80; padding-bottom: 6px; }
+    #crt-text { font-size: 14px; line-height: 1.6; white-space: pre-line; }
+    .crt-btn {
+      margin-top: 16px; padding: 10px 24px; background: #1a3c2e; border: 2px solid #20ff80;
+      color: #20ff80; font-family: monospace; font-weight: bold; font-size: 14px; cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <div id="crosshair"></div>
+    <div id="objective-card">
+      <h3>ACTIVE OBJECTIVE // ACT 1</h3>
+      <div id="objective-text">Locate and restore the Main Laboratory power switch.</div>
+    </div>
+    <div id="status-badge">TORCH: [ON] | FPS: 60</div>
+    <div id="action-prompt">PRESS TO INTERACT</div>
+  </div>
+
+  <!-- TOUCH OVERLAY CONTROLS -->
+  <div id="touch-controls">
+    <div id="joystick-zone">
+      <div id="joystick-knob"></div>
+    </div>
+    <div id="btn-use" class="touch-btn">USE</div>
+    <div id="btn-light" class="touch-btn active">LIGHT</div>
+    <div id="btn-run" class="touch-btn">RUN</div>
+  </div>
+
+  <!-- WIRE CONNECTION PUZZLE -->
+  <div id="wire-puzzle-modal">
+    <div style="font-size: 16px; color: #ffaa00; font-weight: bold; margin-bottom: 12px; letter-spacing: 1px;">
+      GENERATOR REPAIR: CONNECT TERMINALS
+    </div>
+    <div id="wire-board">
+      <canvas id="wire-canvas" width="580" height="320"></canvas>
+      <div class="wire-terminal terminal-left term-red" style="top: 50px;" data-color="red" data-side="left"></div>
+      <div class="wire-terminal terminal-left term-blue" style="top: 120px;" data-color="blue" data-side="left"></div>
+      <div class="wire-terminal terminal-left term-green" style="top: 190px;" data-color="green" data-side="left"></div>
+      <div class="wire-terminal terminal-left term-yellow" style="top: 260px;" data-color="yellow" data-side="left"></div>
+
+      <div class="wire-terminal terminal-right term-green" style="top: 50px;" data-color="green" data-side="right"></div>
+      <div class="wire-terminal terminal-right term-red" style="top: 120px;" data-color="red" data-side="right"></div>
+      <div class="wire-terminal terminal-right term-yellow" style="top: 190px;" data-color="yellow" data-side="right"></div>
+      <div class="wire-terminal terminal-right term-blue" style="top: 260px;" data-color="blue" data-side="right"></div>
+    </div>
+    <button class="crt-btn" style="margin-top: 18px; border-color: #ffaa00; color: #ffaa00; background: #221606;" onclick="closeWirePuzzle()">CLOSE PANEL</button>
+  </div>
+
+  <!-- CRT TERMINAL MODAL -->
+  <div id="terminal-modal">
+    <div id="crt-screen">
+      <h2 id="crt-title">PROJECT ECHO // MAIN MAINFRAME</h2>
+      <div id="crt-text"></div>
+      <button class="crt-btn" id="crt-close-btn" onclick="closeTerminal()">ACKNOWLEDGE</button>
+    </div>
+  </div>
+
+  <canvas id="canvas3d"></canvas>
+
+  <script src="three.min.js"></script>
+  <script>
+    /* ============================================================
+       AUDIO SYNTHESIS (Zero External Audio Dependencies)
+       ============================================================ */
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    
+    function playHum() {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(55, audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.04, audioCtx.currentTime);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+    }
+
+    function playBeep(freq = 800, dur = 0.08) {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + dur);
+    }
+
+    function playSpark() {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const bufferSize = audioCtx.sampleRate * 0.15;
+      const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+      const noise = audioCtx.createBufferSource();
+      noise.buffer = buffer;
+      const gain = audioCtx.createGain();
+      gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+      noise.connect(gain);
+      gain.connect(audioCtx.destination);
+      noise.start();
+    }
+
+    function playStep() {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(90, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.09);
+      gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.09);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.09);
+    }
+
+    /* ============================================================
+       THREE.JS 3D HORROR SCENE & ENVIRONMENT
+       ============================================================ */
+    const canvas = document.getElementById('canvas3d');
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x020608, 0.085);
+
+    const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 1.7, 5);
+
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    // Ambient Darkness
+    const ambientLight = new THREE.AmbientLight(0x05080c, 0.6);
+    scene.add(ambientLight);
+
+    // Player Flashlight
+    const torch = new THREE.SpotLight(0xfff0dd, 2.5, 18, Math.PI / 6.5, 0.45, 1.2);
+    torch.position.copy(camera.position);
+    torch.target = new THREE.Object3D();
+    scene.add(torch);
+    scene.add(torch.target);
+
+    // Main Lab Overhead Fluorescent Light
+    const mainLight = new THREE.PointLight(0x88e0ff, 0.0, 15);
+    mainLight.position.set(0, 3.8, 0);
+    scene.add(mainLight);
+
+    // Build Room Geometry
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x182026, roughness: 0.85, metalness: 0.2 });
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x0e1317, roughness: 0.75, metalness: 0.4 });
+    const ceilingMat = new THREE.MeshStandardMaterial({ color: 0x0a0f12, roughness: 0.9 });
+
+    // Floor (16x24)
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(16, 24), floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    scene.add(floor);
+
+    // Ceiling
+    const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(16, 24), ceilingMat);
+    ceiling.position.y = 4.2;
+    ceiling.rotation.x = Math.PI / 2;
+    scene.add(ceiling);
+
+    // Walls
+    function makeWall(w, h, x, y, z, rotY = 0) {
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), wallMat);
+      mesh.position.set(x, y, z);
+      mesh.rotation.y = rotY;
+      scene.add(mesh);
+      return mesh;
+    }
+    makeWall(16, 4.2, 0, 2.1, -12); // North
+    makeWall(16, 4.2, 0, 2.1, 12, Math.PI); // South
+    makeWall(24, 4.2, -8, 2.1, 0, Math.PI / 2); // West
+    makeWall(24, 4.2, 8, 2.1, 0, -Math.PI / 2); // East
+
+    // PROPS: Workstation Desk
+    const deskMat = new THREE.MeshStandardMaterial({ color: 0x222a30, roughness: 0.7 });
+    const desk = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.9, 1.4), deskMat);
+    desk.position.set(-3.5, 0.45, -7.0);
+    scene.add(desk);
+
+    // CRT Monitor
+    const crtMat = new THREE.MeshStandardMaterial({ color: 0x14181a, roughness: 0.5 });
+    const crt = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.7, 0.6), crtMat);
+    crt.position.set(-3.5, 1.25, -7.0);
+    scene.add(crt);
+
+    // CRT Screen Glow
+    const screenMat = new THREE.MeshBasicMaterial({ color: 0x00ff88 });
+    const screenMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.65, 0.5), screenMat);
+    screenMesh.position.set(-3.5, 1.25, -6.69);
+    scene.add(screenMesh);
+    const crtLight = new THREE.PointLight(0x00ff88, 0.6, 3);
+    crtLight.position.set(-3.5, 1.25, -6.5);
+    scene.add(crtLight);
+
+    // PROPS: Industrial Generator
+    const genMat = new THREE.MeshStandardMaterial({ color: 0x2a363f, metalness: 0.8, roughness: 0.3 });
+    const generator = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.2, 2.0), genMat);
+    generator.position.set(4.8, 1.1, -8.0);
+    scene.add(generator);
+
+    // Generator Panel Door (Interactive)
+    const genPanelMat = new THREE.MeshStandardMaterial({ color: 0x445566, metalness: 0.6, roughness: 0.4 });
+    const genPanel = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.2, 0.08), genPanelMat);
+    genPanel.position.set(4.8, 1.2, -6.95);
+    scene.add(genPanel);
+
+    // PROPS: Wall Light Switch (Interactive)
+    const switchBase = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.06), new THREE.MeshStandardMaterial({ color: 0x8899aa }));
+    switchBase.position.set(-7.95, 1.6, 2.0);
+    switchBase.rotation.y = Math.PI / 2;
+    scene.add(switchBase);
+
+    const switchLever = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.15, 0.08), new THREE.MeshStandardMaterial({ color: 0xff3333 }));
+    switchLever.position.set(-7.90, 1.6, 2.0);
+    switchLever.rotation.y = Math.PI / 2;
+    scene.add(switchLever);
+
+    // Interactive Objects List
+    const interactables = [
+      { name: "switch", mesh: switchBase, dist: 2.8, label: "FLIP LIGHT SWITCH" },
+      { name: "generator", mesh: genPanel, dist: 3.2, label: "OPEN GENERATOR PANEL" },
+      { name: "computer", mesh: crt, dist: 3.0, label: "ACCESS ECHO TERMINAL" }
+    ];
+
+    /* ============================================================
+       GAMEPLAY PROGRESSION & STORY LOGIC
+       ============================================================ */
+    let gameState = "ACT1_SWITCH"; // ACT1_SWITCH -> ACT2_GENERATOR -> ACT3_ECHO -> COMPLETE
+    let powerOnline = false;
+    let hoveredObject = null;
+    let torchActive = true;
+
+    function interact() {
+      if (!hoveredObject) return;
+      playBeep(900, 0.06);
+
+      if (hoveredObject.name === "switch" && gameState === "ACT1_SWITCH") {
+        // Switch activated: lights buzz and blow out!
+        playSpark();
+        mainLight.intensity = 2.8;
+        setTimeout(() => { mainLight.intensity = 0.2; }, 80);
+        setTimeout(() => { mainLight.intensity = 3.2; playSpark(); }, 160);
+        setTimeout(() => {
+          mainLight.intensity = 0.0;
+          playSpark();
+          gameState = "ACT2_GENERATOR";
+          document.getElementById('objective-card').querySelector('h3').innerText = "ACTIVE OBJECTIVE // ACT 2";
+          document.getElementById('objective-text').innerText = "Main power failure! Open the generator panel to repair electrical wiring.";
+          openTerminal("SYSTEM ALERT // VOLTAGE COLLAPSE\n\nEmergency power offline.\nAuxiliary generator terminals severed.\nRestore 4-phase coupling to boot Project Echo Core.");
+        }, 400);
+      }
+      else if (hoveredObject.name === "generator") {
+        if (!powerOnline) {
+          openWirePuzzle();
+        } else {
+          openTerminal("GENERATOR DIAGNOSTIC // NOMINAL\n\nStatus: 4-Phase Grid Synchronized.\nOutput: 440V / 60Hz stable.\nProject Echo Core is online.");
+        }
+      }
+      else if (hoveredObject.name === "computer") {
+        if (!powerOnline) {
+          openTerminal("TERMINAL OFFLINE // NO POWER\n\nRestore generator power to access transmission logs.");
+        } else {
+          openTerminal("INCOMING TRANSMISSION // THE CALLER\n\nCALLER: \"Can you hear me?\"\n\nPLAYER: \"Who is this?\"\n\nCALLER: \"Someone who has been waiting for you to enter Project Echo.\"\n\nCALLER: \"Use Access Code 3729 to unlock the Research Archive.\"\n\nOBJECTIVE COMPLETE // DEMO CLEARED!");
+        }
+      }
+    }
+
+    /* ============================================================
+       WIRE PUZZLE LOGIC
+       ============================================================ */
+    const wireCanvas = document.getElementById('wire-canvas');
+    const wireCtx = wireCanvas.getContext('2d');
+    let connectedWires = {}; // color -> boolean
+    let activeDragColor = null;
+    let dragStartX = 0, dragStartY = 0, curDragX = 0, curDragY = 0;
+
+    function openWirePuzzle() {
+      document.getElementById('wire-puzzle-modal').style.display = 'flex';
+      renderWireCanvas();
+    }
+    function closeWirePuzzle() {
+      document.getElementById('wire-puzzle-modal').style.display = 'none';
+    }
+
+    const termPos = {
+      left: { red: {x: 40, y: 50}, blue: {x: 40, y: 120}, green: {x: 40, y: 190}, yellow: {x: 40, y: 260} },
+      right: { green: {x: 540, y: 50}, red: {x: 540, y: 120}, yellow: {x: 540, y: 190}, blue: {x: 540, y: 260} }
+    };
+
+    function renderWireCanvas() {
+      wireCtx.clearRect(0, 0, wireCanvas.width, wireCanvas.height);
+      const colMap = { red: '#ff2a2a', blue: '#0088ff', green: '#00dd55', yellow: '#ffcc00' };
+
+      // Draw completed connections
+      for (const [col, done] of Object.entries(connectedWires)) {
+        if (done) {
+          wireCtx.strokeStyle = colMap[col];
+          wireCtx.lineWidth = 5;
+          wireCtx.beginPath();
+          wireCtx.moveTo(termPos.left[col].x, termPos.left[col].y);
+          wireCtx.lineTo(termPos.right[col].x, termPos.right[col].y);
+          wireCtx.stroke();
+        }
+      }
+
+      // Draw live drag wire
+      if (activeDragColor) {
+        wireCtx.strokeStyle = colMap[activeDragColor];
+        wireCtx.lineWidth = 4;
+        wireCtx.beginPath();
+        wireCtx.moveTo(dragStartX, dragStartY);
+        wireCtx.lineTo(curDragX, curDragY);
+        wireCtx.stroke();
+      }
+    }
+
+    const terminals = document.querySelectorAll('.wire-terminal');
+    terminals.forEach(term => {
+      term.addEventListener('pointerdown', e => {
+        const side = term.getAttribute('data-side');
+        const color = term.getAttribute('data-color');
+        if (side === 'left' && !connectedWires[color]) {
+          activeDragColor = color;
+          dragStartX = termPos.left[color].x;
+          dragStartY = termPos.left[color].y;
+          curDragX = dragStartX;
+          curDragY = dragStartY;
+        }
+      });
+    });
+
+    window.addEventListener('pointermove', e => {
+      if (!activeDragColor) return;
+      const rect = wireCanvas.getBoundingClientRect();
+      curDragX = (e.clientX - rect.left) * (wireCanvas.width / rect.width);
+      curDragY = (e.clientY - rect.top) * (wireCanvas.height / rect.height);
+      renderWireCanvas();
+    });
+
+    window.addEventListener('pointerup', e => {
+      if (!activeDragColor) return;
+      const targetPos = termPos.right[activeDragColor];
+      const dist = Math.hypot(curDragX - targetPos.x, curDragY - targetPos.y);
+      if (dist < 40) {
+        connectedWires[activeDragColor] = true;
+        playSpark();
+        playBeep(1200, 0.1);
+        
+        // Check if all 4 wires connected!
+        if (Object.keys(connectedWires).length === 4) {
+          setTimeout(() => {
+            closeWirePuzzle();
+            powerOnline = true;
+            mainLight.intensity = 1.4;
+            playHum();
+            gameState = "ACT3_ECHO";
+            document.getElementById('objective-card').querySelector('h3').innerText = "ACTIVE OBJECTIVE // ACT 3";
+            document.getElementById('objective-text').innerText = "Electricity restored! Return to the CRT workstation to read transmission.";
+            openTerminal("ELECTRICITY RESTORED // MAINFRAME ONLINE\n\nIncoming secure transmission detected on channel 4.");
+          }, 500);
+        }
+      }
+      activeDragColor = null;
+      renderWireCanvas();
+    });
+
+    /* ============================================================
+       CRT TERMINAL MODAL HELPERS
+       ============================================================ */
+    function openTerminal(txt) {
+      document.getElementById('crt-text').innerText = txt;
+      document.getElementById('terminal-modal').style.display = 'flex';
+      playBeep(650, 0.12);
+    }
+    function closeTerminal() {
+      document.getElementById('terminal-modal').style.display = 'none';
+      playBeep(450, 0.08);
+    }
+
+    /* ============================================================
+       MOBILE TOUCH CONTROLS (JOYSTICK, SWIPE LOOK, BUTTONS)
+       ============================================================ */
+    let joyValX = 0, joyValY = 0, isRunning = false;
+    const joyZone = document.getElementById('joystick-zone');
+    const joyKnob = document.getElementById('joystick-knob');
+    let joyCenter = { x: 0, y: 0 }, joyActive = false, joyTouchId = null;
+
+    joyZone.addEventListener('pointerdown', e => {
+      joyActive = true;
+      joyTouchId = e.pointerId;
+      const rect = joyZone.getBoundingClientRect();
+      joyCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+      updateJoy(e.clientX, e.clientY);
+    });
+
+    window.addEventListener('pointermove', e => {
+      if (joyActive && e.pointerId === joyTouchId) {
+        updateJoy(e.clientX, e.clientY);
+      } else if (lookActive && e.pointerId === lookTouchId) {
+        const dx = e.clientX - lastLookX;
+        const dy = e.clientY - lastLookY;
+        yaw -= dx * 0.0042;
+        pitch = Math.max(-1.3, Math.min(1.3, pitch - dy * 0.0042));
+        lastLookX = e.clientX;
+        lastLookY = e.clientY;
+      }
+    });
+
+    window.addEventListener('pointerup', e => {
+      if (e.pointerId === joyTouchId) {
+        joyActive = false;
+        joyTouchId = null;
+        joyValX = 0; joyValY = 0;
+        joyKnob.style.transform = `translate(0px, 0px)`;
+      }
+      if (e.pointerId === lookTouchId) {
+        lookActive = false;
+        lookTouchId = null;
+      }
+    });
+
+    function updateJoy(cx, cy) {
+      let dx = cx - joyCenter.x;
+      let dy = cy - joyCenter.y;
+      const dist = Math.hypot(dx, dy);
+      const maxR = 50;
+      if (dist > maxR) {
+        dx = (dx / dist) * maxR;
+        dy = (dy / dist) * maxR;
+      }
+      joyKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+      joyValX = dx / maxR;
+      joyValY = -dy / maxR; // Drag up is forward
+    }
+
+    // Touch Swipe Look (Right 60% of screen)
+    let lookActive = false, lookTouchId = null, lastLookX = 0, lastLookY = 0;
+    let yaw = 0, pitch = 0;
+
+    window.addEventListener('pointerdown', e => {
+      if (e.clientX > window.innerWidth * 0.35 && !e.target.closest('.touch-btn') && !e.target.closest('#wire-puzzle-modal') && !e.target.closest('#terminal-modal')) {
+        lookActive = true;
+        lookTouchId = e.pointerId;
+        lastLookX = e.clientX;
+        lastLookY = e.clientY;
+      }
+    });
+
+    // Touch Buttons
+    const btnUse = document.getElementById('btn-use');
+    btnUse.addEventListener('pointerdown', e => { e.preventDefault(); interact(); });
+
+    const btnLight = document.getElementById('btn-light');
+    btnLight.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      torchActive = !torchActive;
+      torch.intensity = torchActive ? 2.5 : 0.0;
+      btnLight.classList.toggle('active', torchActive);
+      document.getElementById('status-badge').innerText = `TORCH: [${torchActive ? 'ON' : 'OFF'}] | FPS: 60`;
+      playBeep(torchActive ? 900 : 500, 0.05);
+    });
+
+    const btnRun = document.getElementById('btn-run');
+    btnRun.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      isRunning = !isRunning;
+      btnRun.classList.toggle('active', isRunning);
+    });
+
+    /* ============================================================
+       GAME LOOP & COLLISION
+       ============================================================ */
+    let lastTime = performance.now();
+    let stepDist = 0;
+
+    function animate(now) {
+      requestAnimationFrame(animate);
+      const dt = Math.min((now - lastTime) / 1000, 0.05);
+      lastTime = now;
+
+      // Update Camera Look Angles
+      const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)).normalize();
+      const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw)).normalize();
+      
+      const lookTarget = new THREE.Vector3(
+        camera.position.x + Math.cos(pitch) * -Math.sin(yaw),
+        camera.position.y + Math.sin(pitch),
+        camera.position.z + Math.cos(pitch) * -Math.cos(yaw)
+      );
+      camera.lookAt(lookTarget);
+
+      // Player Movement via Joystick
+      if (Math.hypot(joyValX, joyValY) > 0.05) {
+        const speed = isRunning ? 5.8 : 3.4;
+        const moveVec = fwd.clone().multiplyScalar(joyValY * speed * dt)
+          .add(right.clone().multiplyScalar(joyValX * speed * dt));
+
+        camera.position.add(moveVec);
+        camera.position.x = Math.max(-7.2, Math.min(7.2, camera.position.x));
+        camera.position.z = Math.max(-11.2, Math.min(11.2, camera.position.z));
+
+        stepDist += moveVec.length();
+        if (stepDist > 1.8) {
+          playStep();
+          stepDist = 0;
+        }
+      }
+
+      // Update Flashlight Position
+      torch.position.copy(camera.position);
+      torch.target.position.copy(lookTarget);
+
+      // Raycast / Interaction Check
+      hoveredObject = null;
+      for (const item of interactables) {
+        const dist = camera.position.distanceTo(item.mesh.position);
+        if (dist <= item.dist) {
+          const dirToItem = item.mesh.position.clone().sub(camera.position).normalize();
+          const camFwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+          if (camFwd.dot(dirToItem) > 0.75) {
+            hoveredObject = item;
+            break;
+          }
+        }
+      }
+
+      const crosshair = document.getElementById('crosshair');
+      const actionPrompt = document.getElementById('action-prompt');
+      if (hoveredObject) {
+        crosshair.classList.add('active');
+        btnUse.classList.add('highlight');
+        actionPrompt.style.display = 'block';
+        actionPrompt.innerText = hoveredObject.label;
+      } else {
+        crosshair.classList.remove('active');
+        btnUse.classList.remove('highlight');
+        actionPrompt.style.display = 'none';
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    requestAnimationFrame(animate);
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
